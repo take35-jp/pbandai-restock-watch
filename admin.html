@@ -113,7 +113,7 @@ const tokenEl=$('#token'), statusEl=$('#status'), listEl=$('#list'), countEl=$('
 
 // ---- token ----
 tokenEl.value = localStorage.getItem(TOKEN_KEY) || '';
-$('#saveToken').onclick=()=>{localStorage.setItem(TOKEN_KEY,tokenEl.value.trim());setStatus('トークンを記憶しました。','ok')};
+$('#saveToken').onclick=()=>{localStorage.setItem(TOKEN_KEY,tokenEl.value.trim());setStatus('トークンを記憶しました。読み込みます…','ok');loadAll();};
 $('#clearToken').onclick=()=>{localStorage.removeItem(TOKEN_KEY);tokenEl.value='';setStatus('トークンを消去しました。','info')};
 
 function token(){return tokenEl.value.trim()}
@@ -223,6 +223,10 @@ $('#save').onclick=async()=>{
   try{
     const items=collect();
     setStatus('保存中…','info');
+    // 念のため：sha未取得（ロード未実行など）の場合は最新shaを取りに行く
+    if(!wlSha){
+      try{ const r0=await gh(`${WL_PATH}?ref=${BRANCH}&ts=${performance.now()}`); if(r0.ok) wlSha=(await r0.json()).sha; }catch(_){}
+    }
     const body={message:'watchlist更新（管理ツール）',content:b64encode(JSON.stringify(items,null,2)+'\n'),branch:BRANCH,...(wlSha?{sha:wlSha}:{})};
     const r=await gh(WL_PATH,{method:'PUT',body:JSON.stringify(body)});
     if(r.status===409){setStatus('競合：サーバ側が更新されています。「再読込」してからやり直してください。','err');return;}
