@@ -13,7 +13,12 @@ name: restock-watch
 on:
   schedule:
     - cron: '*/5 * * * *'
-  workflow_dispatch: {}
+  workflow_dispatch:
+    inputs:
+      test:
+        description: 'Discord疎通テスト（チェックするとテスト通知だけ送って終了）'
+        type: boolean
+        default: false
 
 permissions:
   contents: write   # state.json をコミットするため
@@ -34,7 +39,7 @@ jobs:
       - name: Run watcher
         env:
           DISCORD_WEBHOOK_URL: ${{ secrets.DISCORD_WEBHOOK_URL }}
-        run: node watch.mjs
+        run: node watch.mjs ${{ inputs.test && '--test' || '' }}
 
       - name: Commit state if changed
         shell: bash
