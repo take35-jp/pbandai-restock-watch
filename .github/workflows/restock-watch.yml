@@ -1,0 +1,50 @@
+# ============================================================================
+# GitHub Actions: プレバン在庫復活ウォッチャー
+#   - schedule: 5分おき（GitHubの最短。混雑時は遅延あり＝数分〜十数分の幅は想定内）
+#   - 状態は state.json にコミットして次回実行へ引き継ぐ
+#     （在庫変化は稀なのでコミットも稀。普段の空振り実行ではコミットしない）
+# 事前準備:
+#   Settings > Secrets and variables > Actions > New repository secret
+#     Name: DISCORD_WEBHOOK_URL   Value: あなたのDiscord Webhook URL
+#   ※ public リポジトリなら Actions 実行時間は無制限。Secret は public でも露出しない。
+# ============================================================================
+name: restock-watch
+
+on:
+  schedule:
+    - cron: '*/5 * * * *'
+  workflow_dispatch: {}
+
+permissions:
+  contents: write   # state.json をコミットするため
+
+concurrency:
+  group: restock-watch
+  cancel-in-progress: false
+
+jobs:
+  watch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Run watcher
+        env:
+          DISCORD_WEBHOOK_URL: ${{ secrets.DISCORD_WEBHOOK_URL }}
+        run: node watch.mjs
+
+      - name: Commit state if changed
+        shell: bash
+        run: |
+          if [[ -n "$(git status --porcelain state.json)" ]]; then
+            git config user.name  "restock-bot"
+            git config user.email "actions@users.noreply.github.com"
+            git add state.json
+            git commit -m "chore: update restock state [skip ci]"
+            git push
+          else
+            echo "no state change"
+          fi
