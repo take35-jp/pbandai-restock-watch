@@ -1,0 +1,18 @@
+# Cloudflare Workers 設定（wrangler CLI で使う人向け。ダッシュボード派は不要）
+# 使い方:
+#   npm i -g wrangler
+#   wrangler login
+#   wrangler kv namespace create STATE        # 出力された id を下の kv_namespaces に貼る
+#   wrangler secret put DISCORD_WEBHOOK_URL    # Webhook URL を入力
+#   wrangler deploy
+name = "pbandai-restock-watch"
+main = "worker.js"
+compatibility_date = "2024-11-01"
+
+[triggers]
+crons = ["* * * * *"]   # 1分おき
+
+# wrangler kv namespace create STATE で作って id を記入する
+# [[kv_namespaces]]
+# binding = "STATE"
+# id = "ここにKV名前空間のIDを貼る"
