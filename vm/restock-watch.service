@@ -1,0 +1,21 @@
+# systemd ユニット: プレバン在庫ウォッチャー（常時稼働デーモン）
+# 配置: sudo cp restock-watch.service /etc/systemd/system/
+# 反映: sudo systemctl daemon-reload && sudo systemctl enable --now restock-watch
+# ログ: journalctl -u restock-watch -f
+[Unit]
+Description=Premium Bandai restock watcher (daemon)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+WorkingDirectory=/opt/restock-watch/vm
+EnvironmentFile=/opt/restock-watch/vm/.env
+ExecStart=/usr/bin/node /opt/restock-watch/vm/watch-daemon.mjs
+Restart=always
+RestartSec=10
+# ↓ 自分のSSHログインユーザー名に変更（Oracle Ubuntuは ubuntu、GCPは自分のユーザー名）
+User=ubuntu
+
+[Install]
+WantedBy=multi-user.target
