@@ -114,13 +114,17 @@ async function runCheck(env) {
       }
     } catch (e) { console.log('item error', item.url, e.message); }
   }
+  // ハートビート: 毎回必ず1行出すので「Workerが生きてるか」をログで確認できる
+  const ordC = Object.values(state).filter((s) => s?.klass === 'orderable').length;
+  const closC = Object.values(state).filter((s) => s?.klass === 'closed').length;
+  console.log(`tick: ${watch.length} items, ${ordC} orderable, ${closC} closed, changed=${changed}`);
   if (changed) await env.STATE.put('state', JSON.stringify(state)); // 変化時のみ書き込み（KV書込上限対策）
 }
 
 export default {
-  // Cron で1分おきに呼ばれる
+  // Cron で1分おきに呼ばれる（awaitで確実に完了させる）
   async scheduled(event, env, ctx) {
-    ctx.waitUntil(runCheck(env));
+    await runCheck(env);
   },
   // 手動疎通確認用:  /?test=1 でDiscordにテスト送信、/ で状態表示
   async fetch(req, env) {
@@ -134,6 +138,21 @@ export default {
       return new Response('Discordにテスト送信しました');
     }
     if (u.searchParams.get('run') === '1') { await runCheck(env); return new Response('チェックを1回実行しました（ログ参照）'); }
-    return new Response('プレバン在庫ウォッチャー (Cron稼働中)。?test=1 でDiscordテスト、?run=1 で即チェック。');
+    if (u.searchParams.get('force-notify') === '1') {
+      // 通知パイプライン全体（notify関数）をテスト実行する
+      try {
+        const wlR = await fetch(WATCHLIST_URL, { cf: { cacheTtl: 0 }, headers: { 'User-Agent': UA } });
+        const wl = (await wlR.json())
+          .map((x) => (typeof x === 'string' ? { url: x, label: '' } : { url: x.url || '', label: x.label || '' }))
+          .filter((x) => x.url);
+        if (!wl.length) return new Response('watchlist が空', { status: 500 });
+        const item = wl[0];
+        const info = await fetchItem(item.url);
+        if (!info.ok) return new Response('item取得失敗: ' + (info.status || 'noLd'), { status: 500 });
+        await notify(env, item, info, 'OutOfStock'); // 擬似的に「OutOfStock→現在状態」として発火
+        return new Response('🧪 擬似通知を送信: ' + (info.name || item.url));
+      } catch (e) { return new Response('error: ' + e.message, { status: 500 }); }
+    }
+    return new Response('プレバン在庫ウォッチャー (Cron稼働中)。?test=1=Discord疎通テスト、?run=1=即チェック、?force-notify=1=通知パイプラインの擬似発火');
   },
 };
