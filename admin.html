@@ -4,24 +4,26 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="robots" content="noindex">
-<title>プレバン在庫ウォッチ 管理ツール</title>
+<title>在庫ウォッチ 管理ツール</title>
 <style>
   :root{
     --bg:#0f1115; --panel:#171a21; --panel2:#1f242e; --line:#2a313d;
     --fg:#e7ebf0; --muted:#8b95a5; --accent:#3ba776; --accent2:#2d8cd0;
     --danger:#d6584f; --warn:#d8a13a; --green:#2ecc71; --red:#e25b54; --gray:#6b7585;
+    --amazon:#ff9900; --rakuten:#bf0000;
   }
   *{box-sizing:border-box}
   body{margin:0;background:var(--bg);color:var(--fg);font-family:system-ui,"Segoe UI","Hiragino Kaku Gothic ProN",Meiryo,sans-serif;line-height:1.6}
-  .wrap{max-width:860px;margin:0 auto;padding:20px 16px 80px}
+  .wrap{max-width:900px;margin:0 auto;padding:20px 16px 80px}
   h1{font-size:20px;margin:0 0 4px}
   .sub{color:var(--muted);font-size:13px;margin:0 0 20px}
   .panel{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:16px;margin-bottom:16px}
   .panel h2{font-size:14px;margin:0 0 12px;color:var(--muted);font-weight:600;letter-spacing:.04em}
   label{display:block;font-size:12px;color:var(--muted);margin:0 0 4px}
-  input[type=text],input[type=password]{width:100%;background:var(--panel2);border:1px solid var(--line);border-radius:8px;color:var(--fg);padding:9px 11px;font-size:14px;font-family:inherit}
-  input:focus{outline:none;border-color:var(--accent2)}
-  .row-input.bad input{border-color:var(--danger)}
+  input[type=text],input[type=password],select{width:100%;background:var(--panel2);border:1px solid var(--line);border-radius:8px;color:var(--fg);padding:9px 11px;font-size:14px;font-family:inherit}
+  select{cursor:pointer}
+  input:focus,select:focus{outline:none;border-color:var(--accent2)}
+  .row-id.bad input{border-color:var(--danger)}
   button{font-family:inherit;font-size:14px;border:1px solid var(--line);background:var(--panel2);color:var(--fg);border-radius:8px;padding:9px 14px;cursor:pointer;transition:.12s}
   button:hover{filter:brightness(1.15)}
   button:disabled{opacity:.45;cursor:default}
@@ -34,12 +36,14 @@
   .toolbar{position:sticky;top:0;z-index:5;background:var(--bg);padding:10px 0;margin:-10px 0 4px}
   .item{display:flex;gap:10px;align-items:flex-start;padding:12px;border:1px solid var(--line);border-radius:10px;margin-bottom:10px;background:var(--panel2)}
   .item .grow{flex:1;min-width:0}
-  .item .label-in{margin-bottom:6px;font-weight:600}
+  .item-row{display:grid;grid-template-columns:110px 1fr;gap:8px;margin-bottom:6px}
   .badge{display:inline-block;font-size:11px;font-weight:700;padding:2px 9px;border-radius:999px;white-space:nowrap;margin-top:6px}
   .b-green{background:rgba(46,204,113,.16);color:#54e08a}
   .b-red{background:rgba(226,91,84,.16);color:#ff8a82}
   .b-gray{background:rgba(120,130,150,.18);color:#aab3c2}
-  .url-link{font-size:12px;color:var(--accent2);text-decoration:none;word-break:break-all}
+  .b-amazon{background:rgba(255,153,0,.15);color:#ffb04a}
+  .b-rakuten{background:rgba(191,0,0,.18);color:#ff7a7a}
+  .url-link{font-size:12px;color:var(--accent2);text-decoration:none;word-break:break-all;margin-left:4px}
   .url-link:hover{text-decoration:underline}
   .status{font-size:13px;min-height:20px;margin-top:6px}
   .status.ok{color:var(--green)} .status.err{color:var(--danger)} .status.info{color:var(--muted)}
@@ -49,14 +53,14 @@
   a{color:var(--accent2)}
   details summary{cursor:pointer;color:var(--muted);font-size:13px}
   .empty{color:var(--muted);text-align:center;padding:24px;border:1px dashed var(--line);border-radius:10px}
+  code{background:rgba(255,255,255,0.06);padding:1px 5px;border-radius:4px;font-size:12px}
 </style>
 </head>
 <body>
 <div class="wrap">
-  <h1>🛒 プレバン在庫ウォッチ 管理ツール</h1>
-  <p class="sub">監視リスト（watchlist.json）を GitHub に直接読み書きします。保存すると次回チェック（5分おき）から反映。</p>
+  <h1>🛒 在庫ウォッチ 管理ツール</h1>
+  <p class="sub">Amazon PA-API + 楽天API で監視するリストを管理。保存すると次回チェック（5分おき）から反映。</p>
 
-  <!-- 設定 -->
   <div class="panel">
     <h2>⚙️ 接続設定</h2>
     <label for="token">GitHub トークン（Fine-grained PAT・Contents: Read and write）</label>
@@ -65,15 +69,9 @@
       <button id="saveToken" class="btn-ghost">記憶</button>
       <button id="clearToken" class="btn-ghost">消去</button>
     </div>
-    <p class="hint">トークンはこのブラウザ（localStorage）にのみ保存され、GitHub 以外には送信しません。リポジトリ: <code>take35-jp/pbandai-restock-watch</code></p>
-    <details><summary>トークンの作り方</summary>
-      <p class="hint">GitHub → Settings → Developer settings → <b>Fine-grained tokens</b> → Generate new token →
-      Repository access で <code>pbandai-restock-watch</code> のみ選択 → Permissions の <b>Contents</b> を <b>Read and write</b> に →
-      生成された <code>github_pat_...</code> を上に貼る。</p>
-    </details>
+    <p class="hint">トークンはこのブラウザ（localStorage）にのみ保存されます。リポジトリ: <code>take35-jp/pbandai-restock-watch</code></p>
   </div>
 
-  <!-- ツールバー -->
   <div class="toolbar flex between">
     <div class="flex">
       <span id="count" class="sub" style="margin:0">—</span>
@@ -81,38 +79,39 @@
     </div>
     <div class="flex">
       <button id="reload" class="btn-ghost">🔄 再読込</button>
-      <button id="add" class="btn-accent">＋ キットを追加</button>
+      <button id="addAmazon" class="btn-ghost">＋ Amazon</button>
+      <button id="addRakuten" class="btn-ghost">＋ 楽天</button>
       <button id="save" class="btn-primary">💾 保存</button>
     </div>
   </div>
-  <div id="status" class="status info">トークンを入れて「再読込」を押してください。</div>
+  <div id="status" class="status info">トークンを入れて「記憶」を押してください（保存済みなら自動で読み込みます）。</div>
 
-  <!-- リスト -->
   <div id="list" class="panel"></div>
 
-  <p class="hint">URL はプレバン商品ページ（<code>https://p-bandai.jp/item/item-XXXX/</code>）のみ。ラベルは省略可（監視時に商品名を自動取得）。
-  ステータスは前回チェック時点の状態です。</p>
+  <div class="hint">
+    <strong>Amazon</strong>: ASIN（<code>B08XXXXXXX</code> 形式・10桁）。商品ページURL <code>amazon.co.jp/dp/B08XXXXXXX</code> から抜き出す。<br>
+    <strong>楽天</strong>: JAN（バーコードの13桁数字）。信頼ショップ(book, amiami, yodobashi, joshin, biccamera 等)の在庫のみ判定。<br>
+    ラベルは表示用の覚え書き（省略可）。
+  </div>
 </div>
 
 <script>
 const OWNER='take35-jp', REPO='pbandai-restock-watch', BRANCH='main';
-const WL_PATH='watchlist.json', STATE_PATH='state.json';
+const WL_PATH='watchlist.json', STATE_PATH='daemon-api/state.json';
 const API=`https://api.github.com/repos/${OWNER}/${REPO}/contents`;
 const TOKEN_KEY='pbandai_admin_token';
 
-const ORDERABLE=new Set(['InStock','PreOrder','BackOrder','LimitedAvailability','OnlineOnly','InStoreOnly']);
-const CLOSED=new Set(['OutOfStock','SoldOut','Discontinued','PreSale']);
-const STATUS_JA={InStock:'在庫あり',PreOrder:'予約受付中',BackOrder:'お取り寄せ',LimitedAvailability:'数量限定',OnlineOnly:'ネット限定',InStoreOnly:'店頭限定',OutOfStock:'受付終了/売切',SoldOut:'売切',Discontinued:'販売終了',PreSale:'販売前',unknown:'不明'};
+const STATUS_JA={Now:'在庫あり',IncludesMOQ:'在庫あり(数量条件)',OutOfStock:'在庫切れ',PreOrder:'予約受付中',BackOrder:'お取り寄せ',Discontinued:'販売終了',available:'在庫あり',unavailable:'在庫切れ',Unknown:'不明'};
+const PLATFORM_JA={amazon:'Amazon',rakuten:'楽天'};
 
-let wlSha=null;        // watchlist.json の現在sha（PUTに必要）
-let state={};          // url -> {availability,klass,name}
+let wlSha=null;
+let state={};
 let dirty=false;
 
 const $=s=>document.querySelector(s);
-const tokenEl=$('#token'), statusEl=$('#status'), listEl=$('#list'), countEl=$('#count');
+const tokenEl=$('#token'),statusEl=$('#status'),listEl=$('#list'),countEl=$('#count');
 
-// ---- token ----
-tokenEl.value = localStorage.getItem(TOKEN_KEY) || '';
+tokenEl.value=localStorage.getItem(TOKEN_KEY)||'';
 $('#saveToken').onclick=()=>{localStorage.setItem(TOKEN_KEY,tokenEl.value.trim());setStatus('トークンを記憶しました。読み込みます…','ok');loadAll();};
 $('#clearToken').onclick=()=>{localStorage.removeItem(TOKEN_KEY);tokenEl.value='';setStatus('トークンを消去しました。','info')};
 
@@ -123,54 +122,74 @@ function setDirty(d){dirty=d;document.body.classList.toggle('dirty',d)}
 function b64decode(b64){return new TextDecoder().decode(Uint8Array.from(atob(b64.replace(/\s/g,'')),c=>c.charCodeAt(0)))}
 function b64encode(text){const bytes=new TextEncoder().encode(text);let bin='';bytes.forEach(b=>bin+=String.fromCharCode(b));return btoa(bin)}
 
-async function gh(path, opts={}){
-  if(!token()){throw new Error('トークン未入力')}
-  const r=await fetch(`${API}/${path}`,{...opts,headers:{'Accept':'application/vnd.github+json','Authorization':'Bearer '+token(),...(opts.headers||{})}});
+async function gh(pathOrUrl,opts={}){
+  if(!token()) throw new Error('トークン未入力');
+  const url=pathOrUrl.startsWith('http')?pathOrUrl:`${API}/${pathOrUrl}`;
+  const r=await fetch(url,{...opts,headers:{'Accept':'application/vnd.github+json','Authorization':'Bearer '+token(),...(opts.headers||{})}});
   if(r.status===401) throw new Error('トークンが無効です（401）');
   if(r.status===403) throw new Error('権限不足かレート制限（403）');
   return r;
 }
 
-// ---- load ----
 async function loadAll(){
   try{
     setStatus('読み込み中…','info');
-    // state.json（無くてもOK）
     state={};
     try{
       const rs=await gh(`${STATE_PATH}?ref=${BRANCH}&ts=${performance.now()}`);
       if(rs.ok){const js=await rs.json();state=JSON.parse(b64decode(js.content));}
-    }catch(e){/* state無視 */}
-    // watchlist.json
+    }catch(e){/* stateは無くてもOK */}
     const rw=await gh(`${WL_PATH}?ref=${BRANCH}&ts=${performance.now()}`);
     if(!rw.ok) throw new Error('watchlist.json 取得失敗（'+rw.status+'）');
     const jw=await rw.json();
     wlSha=jw.sha;
-    const items=JSON.parse(b64decode(jw.content)).map(x=>typeof x==='string'?{url:x,label:''}:{url:x.url||'',label:x.label||''});
+    const raw=JSON.parse(b64decode(jw.content));
+    const items=raw.map(x=>{
+      if(!x||typeof x!=='object') return null;
+      const p=(x.platform||'').toLowerCase();
+      if(p!=='amazon'&&p!=='rakuten') return null;
+      const id=String(x.id||x.asin||x.jan||'').trim();
+      return {platform:p,id,label:x.label||''};
+    }).filter(Boolean);
     render(items);
     setDirty(false);
-    setStatus('読み込み完了。',' ok');
+    setStatus(`読み込み完了（${items.length}件）`,'ok');
   }catch(e){setStatus(e.message,'err')}
 }
 
-// ---- render ----
-function badge(url){
-  const s=state[url];
+function stateKey(it){return `${it.platform}:${it.id}`}
+function badge(it){
+  if(!it.id) return '<span class="badge b-gray">未入力</span>';
+  const s=state[stateKey(it)];
   if(!s) return '<span class="badge b-gray">未チェック</span>';
   const ja=STATUS_JA[s.availability]||s.availability;
-  const cls=ORDERABLE.has(s.availability)?'b-green':CLOSED.has(s.availability)?'b-red':'b-gray';
+  const cls=s.klass==='orderable'?'b-green':s.klass==='closed'?'b-red':'b-gray';
   return `<span class="badge ${cls}">${ja}</span>`;
 }
+function itemUrl(it){
+  if(!it.id) return '';
+  if(it.platform==='amazon') return `https://www.amazon.co.jp/dp/${it.id}`;
+  if(it.platform==='rakuten') return `https://search.rakuten.co.jp/search/mall/${encodeURIComponent(it.id)}/`;
+  return '';
+}
 function rowHTML(it){
-  const name=it.label||((state[it.url]||{}).name)||'';
-  return `<div class="item" data-row>
+  const stateInfo=state[stateKey(it)];
+  const name=stateInfo?.name||'';
+  return `<div class="item" data-row data-platform="${it.platform}">
     <div class="grow">
-      <input class="wl-label label-in" type="text" placeholder="ラベル（省略可・自動取得）" value="${escAttr(it.label)}">
-      <div class="row-input"><input class="wl-url" type="text" placeholder="https://p-bandai.jp/item/item-XXXX/" value="${escAttr(it.url)}"></div>
-      <div class="flex" style="gap:8px">
-        ${badge(it.url)}
-        ${it.url?`<a class="url-link" href="${escAttr(it.url)}" target="_blank" rel="noopener">開く ↗</a>`:''}
-        ${name&&!it.label?`<span class="hint" style="margin:0">${escHtml(name)}</span>`:''}
+      <input class="wl-label" type="text" placeholder="ラベル（省略可）" value="${escAttr(it.label)}" style="margin-bottom:6px">
+      <div class="item-row">
+        <select class="wl-platform">
+          <option value="amazon" ${it.platform==='amazon'?'selected':''}>Amazon</option>
+          <option value="rakuten" ${it.platform==='rakuten'?'selected':''}>楽天</option>
+        </select>
+        <div class="row-id"><input class="wl-id" type="text" placeholder="${it.platform==='rakuten'?'JAN (13桁数字)':'ASIN (B0XXXXXXXX)'}" value="${escAttr(it.id)}"></div>
+      </div>
+      <div class="flex" style="gap:6px;flex-wrap:wrap">
+        <span class="badge ${it.platform==='amazon'?'b-amazon':'b-rakuten'}">${PLATFORM_JA[it.platform]}</span>
+        ${badge(it)}
+        ${itemUrl(it)?`<a class="url-link" href="${escAttr(itemUrl(it))}" target="_blank" rel="noopener">開く ↗</a>`:''}
+        ${name?`<span class="hint" style="margin:0">${escHtml(name)}</span>`:''}
       </div>
     </div>
     <button class="btn-danger" data-del title="削除">🗑</button>
@@ -180,52 +199,73 @@ function escAttr(s){return String(s||'').replace(/"/g,'&quot;').replace(/</g,'&l
 function escHtml(s){return String(s||'').replace(/</g,'&lt;')}
 
 function render(items){
-  if(!items.length){listEl.innerHTML='<div class="empty">監視中のキットはありません。「＋ キットを追加」で登録してください。</div>';}
+  if(!items.length){listEl.innerHTML='<div class="empty">監視中のキットはありません。「＋ Amazon」または「＋ 楽天」で追加してください。</div>';}
   else{listEl.innerHTML=items.map(rowHTML).join('');}
   bindRows();
   updateCount();
 }
 function bindRows(){
   listEl.querySelectorAll('[data-del]').forEach(b=>b.onclick=()=>{b.closest('[data-row]').remove();setDirty(true);updateCount();});
-  listEl.querySelectorAll('input').forEach(i=>i.addEventListener('input',()=>setDirty(true)));
+  listEl.querySelectorAll('input,select').forEach(i=>i.addEventListener('input',()=>setDirty(true)));
+  listEl.querySelectorAll('.wl-platform').forEach(sel=>sel.addEventListener('change',(e)=>{
+    // プレースホルダー変えるだけ
+    const row=e.target.closest('[data-row]');
+    const idInput=row.querySelector('.wl-id');
+    idInput.placeholder=e.target.value==='rakuten'?'JAN (13桁数字)':'ASIN (B0XXXXXXXX)';
+    row.dataset.platform=e.target.value;
+  }));
 }
-function updateCount(){countEl.textContent=`${listEl.querySelectorAll('[data-row]').length} 件`}
+function updateCount(){
+  const rows=listEl.querySelectorAll('[data-row]');
+  const a=[...rows].filter(r=>r.dataset.platform==='amazon').length;
+  const r=[...rows].filter(r=>r.dataset.platform==='rakuten').length;
+  countEl.textContent=`${rows.length} 件 (Amazon:${a} 楽天:${r})`;
+}
 
-// ---- add ----
-$('#add').onclick=()=>{
+function addRow(platform){
   if(listEl.querySelector('.empty')) listEl.innerHTML='';
-  listEl.insertAdjacentHTML('beforeend',rowHTML({url:'',label:''}));
+  listEl.insertAdjacentHTML('beforeend',rowHTML({platform,id:'',label:''}));
   bindRows();updateCount();setDirty(true);
-  const last=listEl.querySelector('[data-row]:last-child .wl-url'); if(last) last.focus();
-};
+  const last=listEl.querySelector('[data-row]:last-child .wl-id'); if(last) last.focus();
+}
+$('#addAmazon').onclick=()=>addRow('amazon');
+$('#addRakuten').onclick=()=>addRow('rakuten');
 
-// ---- gather + validate ----
 function collect(){
   const rows=[...listEl.querySelectorAll('[data-row]')];
   const items=[]; let bad=false;
+  const seen=new Set();
   rows.forEach(r=>{
-    r.querySelector('.row-input').classList.remove('bad');
-    const url=r.querySelector('.wl-url').value.trim();
+    const rIdEl=r.querySelector('.row-id');
+    rIdEl.classList.remove('bad');
+    const platform=r.querySelector('.wl-platform').value;
+    const id=r.querySelector('.wl-id').value.trim();
     const label=r.querySelector('.wl-label').value.trim();
-    if(!url) return; // 空行は無視
-    if(!/^https:\/\/p-bandai\.jp\/item\//.test(url)){r.querySelector('.row-input').classList.add('bad');bad=true;return;}
-    items.push(label?{url,label}:{url});
+    if(!id) return;
+    // 形式検証
+    let ok=true;
+    if(platform==='amazon'){
+      // ASIN: 10文字英数字（Bで始まることが多いが必須ではない）
+      if(!/^[A-Z0-9]{10}$/i.test(id)) ok=false;
+    }else if(platform==='rakuten'){
+      if(!/^\d{8,14}$/.test(id)) ok=false;
+    }
+    if(!ok){rIdEl.classList.add('bad');bad=true;return;}
+    const key=`${platform}:${id}`;
+    if(seen.has(key)){rIdEl.classList.add('bad');bad=true;return;}
+    seen.add(key);
+    items.push(label?{platform,id,label}:{platform,id});
   });
-  if(bad) throw new Error('赤枠のURLが不正です（https://p-bandai.jp/item/... のみ）');
-  // 重複チェック
-  const urls=items.map(i=>i.url), dup=urls.find((u,i)=>urls.indexOf(u)!==i);
-  if(dup) throw new Error('URLが重複しています: '+dup);
+  if(bad) throw new Error('赤枠のIDが不正または重複しています（ASINは10文字英数字、JANは8〜14桁数字）');
   return items;
 }
 
-// ---- save ----
 $('#save').onclick=async()=>{
   try{
     const items=collect();
     setStatus('保存中…','info');
-    // 念のため：sha未取得（ロード未実行など）の場合は最新shaを取りに行く
     if(!wlSha){
-      try{ const r0=await gh(`${WL_PATH}?ref=${BRANCH}&ts=${performance.now()}`); if(r0.ok) wlSha=(await r0.json()).sha; }catch(_){}
+      try{const r0=await gh(`${WL_PATH}?ref=${BRANCH}&ts=${performance.now()}`); if(r0.ok) wlSha=(await r0.json()).sha;}catch(_){}
     }
     const body={message:'watchlist更新（管理ツール）',content:b64encode(JSON.stringify(items,null,2)+'\n'),branch:BRANCH,...(wlSha?{sha:wlSha}:{})};
     const r=await gh(WL_PATH,{method:'PUT',body:JSON.stringify(body)});
@@ -237,11 +277,10 @@ $('#save').onclick=async()=>{
   }catch(e){setStatus(e.message,'err')}
 };
 
-$('#reload').onclick=()=>{ if(dirty && !confirm('未保存の変更を破棄して再読込しますか？')) return; loadAll(); };
+$('#reload').onclick=()=>{if(dirty&&!confirm('未保存の変更を破棄して再読込しますか？')) return; loadAll();};
 
-window.addEventListener('beforeunload',e=>{ if(dirty){e.preventDefault();e.returnValue='';} });
+window.addEventListener('beforeunload',e=>{if(dirty){e.preventDefault();e.returnValue='';}});
 
-// 起動時：トークンがあれば自動ロード
 if(token()) loadAll();
 </script>
 </body>

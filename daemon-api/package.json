@@ -1,0 +1,10 @@
+{
+  "name": "restock-watch-api",
+  "version": "1.0.0",
+  "type": "module",
+  "private": true,
+  "description": "Amazon PA-API + Rakuten API restock watcher daemon (no browser required)",
+  "scripts": {
+    "start": "node watch.mjs"
+  }
+}
