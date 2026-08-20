@@ -31,7 +31,8 @@ const UA =
   '(KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36';
 const WEBHOOK = process.env.DISCORD_WEBHOOK_URL || '';
 const INTERVAL_MS = Number(process.env.INTERVAL_MS || 30000);
-const REQUEST_GAP_MS = Number(process.env.REQUEST_GAP_MS || 2000);
+const REQUEST_GAP_MS = Number(process.env.REQUEST_GAP_MS || 4000);
+const RETRY_ON_EMPTY = Number(process.env.RETRY_ON_EMPTY || 1); // noLd時のリトライ回数
 const WATCHLIST_URL = process.env.WATCHLIST_URL ||
   'https://raw.githubusercontent.com/take35-jp/pbandai-restock-watch/main/watchlist.json';
 const WATCHLIST_REFRESH_MS = Number(process.env.WATCHLIST_REFRESH_MS || 300000);
@@ -113,19 +114,39 @@ async function initBrowser() {
   log('browser initialized (Chromium + stealth)');
 }
 
-async function fetchItem(url) {
+async function fetchItemOnce(url) {
   try {
     await page.goto(url, { waitUntil: 'domcontentloaded', timeout: 45000 });
-    await page.waitForLoadState('networkidle', { timeout: 8000 }).catch(() => {});
+    // Product JSON-LD が実際にDOMに現れるまで待つ（networkidleより信頼できる）
+    await page.waitForFunction(
+      () => {
+        for (const s of document.querySelectorAll('script[type="application/ld+json"]')) {
+          const t = s.textContent || '';
+          if (t.includes('"Product"')) return true;
+        }
+        return false;
+      },
+      { timeout: 15000 },
+    ).catch(() => {});
     const finalUrl = page.url();
     if (finalUrl.includes('restriction.p-bandai.jp')) return { ok: false, status: 'blocked' };
     const html = await page.content();
+    if (html.length < 5000) return { ok: false, noLd: true, empty: true };
     const info = parseProduct(html);
     if (!info) return { ok: false, noLd: true };
     return { ok: true, ...info };
   } catch (e) {
     return { ok: false, error: e.message };
   }
+}
+
+async function fetchItem(url) {
+  let last = await fetchItemOnce(url);
+  for (let i = 0; i < RETRY_ON_EMPTY && !last.ok && (last.noLd || last.empty); i++) {
+    await sleep(3000 + Math.random() * 2000); // 3〜5秒待って再挑戦
+    last = await fetchItemOnce(url);
+  }
+  return last;
 }
 
 async function sendDiscord(item, info, prevAv) {
