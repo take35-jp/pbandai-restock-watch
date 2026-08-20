@@ -1,0 +1,14 @@
+{
+  "name": "pbandai-restock-watch-daemon",
+  "version": "2.0.0",
+  "type": "module",
+  "private": true,
+  "description": "Premium Bandai restock watcher daemon (Playwright-based, bypasses STC Bot Manager)",
+  "scripts": {
+    "start": "node watch-daemon-pw.mjs",
+    "postinstall": "playwright install chromium"
+  },
+  "dependencies": {
+    "playwright": "^1.49.0"
+  }
+}
