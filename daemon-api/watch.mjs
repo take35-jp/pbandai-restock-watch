@@ -24,6 +24,7 @@ import fs from 'node:fs';
 import { readFile, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { spawn } from 'node:child_process';
 
 const DIR = path.dirname(fileURLToPath(import.meta.url));
 
@@ -80,6 +81,27 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 const log = (...a) => console.log(new Date().toISOString(), ...a);
 const chunk = (arr, n) => { const o = []; for (let i = 0; i < arr.length; i += n) o.push(arr.slice(i, i + n)); return o; };
 
+// PC の既定ブラウザで URL を開く（自動カート追加用）
+function openInBrowser(url) {
+  try {
+    if (process.platform === 'win32') {
+      spawn('cmd.exe', ['/c', 'start', '', url], { detached: true, stdio: 'ignore', windowsHide: true }).unref();
+    } else if (process.platform === 'darwin') {
+      spawn('open', [url], { detached: true, stdio: 'ignore' }).unref();
+    } else {
+      spawn('xdg-open', [url], { detached: true, stdio: 'ignore' }).unref();
+    }
+    return true;
+  } catch (e) {
+    log('browser open error:', e.message);
+    return false;
+  }
+}
+
+function amazonCartAddUrl(asin, qty) {
+  return `https://www.amazon.co.jp/gp/aws/cart/add.html?ASIN.1=${encodeURIComponent(asin)}&Quantity.1=${qty}&AssociateTag=${encodeURIComponent(AMAZON_TAG)}`;
+}
+
 let state = {};
 let watch = [];
 let lastWatchFetch = 0;
@@ -106,7 +128,11 @@ async function refreshWatchlist(force) {
       const id = String(x.id || x.asin || x.jan || '').trim();
       if (!id || (p !== 'amazon' && p !== 'rakuten')) return null;
       const priceMax = (typeof x.priceMax === 'number' && x.priceMax > 0) ? x.priceMax : null;
-      return { platform: p, id, label: x.label || '', url: x.url || '', priceMax };
+      // autoCart: true (=1個) または 数値N (=N個)、未指定なら null
+      let autoCart = null;
+      if (x.autoCart === true) autoCart = 1;
+      else if (typeof x.autoCart === 'number' && x.autoCart > 0) autoCart = Math.floor(x.autoCart);
+      return { platform: p, id, label: x.label || '', url: x.url || '', priceMax, autoCart };
     }).filter(Boolean);
     lastWatchFetch = Date.now();
     log('watchlist refreshed:', watch.length, 'items');
@@ -304,11 +330,16 @@ async function sendDiscord(res, prev, flags) {
   }
   if (res.shopCode) desc.push(`ショップ: ${res.shopCode}`);
 
+  // 自動カート追加が発火した場合は最上位に強調表示
+  if (flags.autoCartOpened) {
+    desc.unshift(`🚨 **自動カート追加を実行しました（${flags.autoCartQty}個）** — Amazonアプリ/ブラウザで確認→レジで確定`);
+  }
+
   // Amazon: タイトルをタップ = カートに1個追加（Associates公式Add-to-Cart URL）
   // 商品ページも見たい場合の補助リンクは description に添える
   let primaryUrl = res.url;
   if (res.src.platform === 'amazon' && AMAZON_TAG) {
-    primaryUrl = `https://www.amazon.co.jp/gp/aws/cart/add.html?ASIN.1=${encodeURIComponent(res.src.id)}&Quantity.1=1&AssociateTag=${encodeURIComponent(AMAZON_TAG)}`;
+    primaryUrl = amazonCartAddUrl(res.src.id, 1);
     desc.push(`👉 **タイトルをタップ = カートに1個追加**  ／  [商品ページ](${res.url})`);
   }
 
@@ -361,10 +392,18 @@ async function tick() {
     const priceDropped = priceMax != null && r.price != null && r.price <= priceMax
       && prevPrice != null && prevPrice > priceMax;
 
+    // 自動カート追加（autoCart指定Amazonアイテムのみ）
+    let autoCartOpened = false;
+    if ((restocked || priceDropped) && r.src.platform === 'amazon' && r.src.autoCart && AMAZON_TAG) {
+      const qty = r.src.autoCart;
+      autoCartOpened = openInBrowser(amazonCartAddUrl(r.src.id, qty));
+      if (autoCartOpened) log('🚨 auto-cart opened:', qty, 'x', r.name);
+    }
+
     if (restocked || priceDropped) {
-      await sendDiscord(r, prev, { restocked, priceDropped, priceMax });
+      await sendDiscord(r, prev, { restocked, priceDropped, priceMax, autoCartOpened, autoCartQty: r.src.autoCart });
       notifs++;
-      log('*** NOTIFY', restocked ? '[restock]' : '', priceDropped ? '[price]' : '', r.name);
+      log('*** NOTIFY', restocked ? '[restock]' : '', priceDropped ? '[price]' : '', autoCartOpened ? '[auto-cart]' : '', r.name);
     }
 
     // 状態保存：availability か price に変化があれば

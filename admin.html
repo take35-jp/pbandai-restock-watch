@@ -92,6 +92,7 @@
     <strong>Amazon</strong>: ASIN（<code>B08XXXXXXX</code> 形式・10桁）。商品ページURL <code>amazon.co.jp/dp/B08XXXXXXX</code> から抜き出す。<br>
     <strong>楽天</strong>: JAN（バーコードの13桁数字）。信頼ショップ(book, amiami, yodobashi, joshin, biccamera 等)の在庫のみ判定。<br>
     <strong>希望価格</strong>（任意）: この価格以下に下がった瞬間、Discordに通知（一度下がったあと再上昇→再下降まで再通知しない）。復活通知と同時発火した場合は1本の🎯通知にまとめて送信。<br>
+    <strong>🚨 自動カート追加</strong>（Amazonのみ）: ONにすると、通知発火の瞬間にPCの既定ブラウザが起動してAmazonのカート追加URLを開きます（Associates公式）。ログイン済みならその場でカート反映。<strong>購入は人間がレジで確定します</strong>（自動購入ではありません）。<br>
     ラベルは表示用の覚え書き（省略可）。
   </div>
 </div>
@@ -151,7 +152,8 @@ async function loadAll(){
       if(p!=='amazon'&&p!=='rakuten') return null;
       const id=String(x.id||x.asin||x.jan||'').trim();
       const priceMax=(typeof x.priceMax==='number'&&x.priceMax>0)?x.priceMax:null;
-      return {platform:p,id,label:x.label||'',priceMax};
+      const autoCart=x.autoCart===true||(typeof x.autoCart==='number'&&x.autoCart>0);
+      return {platform:p,id,label:x.label||'',priceMax,autoCart};
     }).filter(Boolean);
     render(items);
     setDirty(false);
@@ -197,6 +199,10 @@ function rowHTML(it){
         ${priceInfo?`<span class="hint" style="margin:0">${priceInfo}</span>`:''}
         ${name?`<span class="hint" style="margin:0">${escHtml(name)}</span>`:''}
       </div>
+      <label class="flex" style="gap:6px;align-items:center;margin-top:6px;font-size:12px;color:var(--muted);cursor:pointer">
+        <input type="checkbox" class="wl-autoCart" ${it.autoCart?'checked':''}>
+        <span>🚨 自動カート追加（1個・Amazonのみ）</span>
+      </label>
     </div>
     <button class="btn-danger" data-del title="削除">🗑</button>
   </div>`;
@@ -264,12 +270,14 @@ function collect(){
       priceMax=Number(priceMaxRaw);
       if(!Number.isFinite(priceMax)||priceMax<=0){priceEl.style.borderColor='var(--danger)';bad=true;return;}
     }
+    const autoCart=r.querySelector('.wl-autoCart').checked;
     const key=`${platform}:${id}`;
     if(seen.has(key)){rIdEl.classList.add('bad');bad=true;return;}
     seen.add(key);
     const item={platform,id};
     if(label) item.label=label;
     if(priceMax) item.priceMax=priceMax;
+    if(autoCart) item.autoCart=true;
     items.push(item);
   });
   if(bad) throw new Error('赤枠が不正です（ASIN=10文字英数字, JAN=8〜14桁数字, 希望価格=正の数値）');
