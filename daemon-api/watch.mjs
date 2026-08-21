@@ -64,13 +64,16 @@ const TRUSTED_SHOPS_RAKUTEN = new Set([
 ]);
 
 // Amazon PA-API availability.type の分類
-// 参考: PA-API 5 の availability type にはいろいろあるので、
-// 「明らかに買える」ものを orderable、「明らかにダメ」を closed、それ以外は unknown。
+// Creators APIは SCREAMING_SNAKE_CASE、PA-API 5 は CamelCase など揺れがあるので
+// 大文字化＆非英字除去で正規化してから判定する。
+function normalizeAv(av) { return String(av || '').toUpperCase().replace(/[^A-Z]/g, ''); }
 const AMAZON_ORDERABLE = new Set([
-  'Now', 'IN_STOCK_SCARCE', 'IncludesMOQ',
-  'PreOrder', 'Backordered', 'BackOrder',
+  'NOW', 'INSTOCKSCARCE', 'INCLUDESMOQ',
+  'PREORDER', 'BACKORDERED', 'BACKORDER',
 ]);
-const AMAZON_CLOSED = new Set(['OutOfStock', 'Discontinued', 'DISCONTINUED']);
+const AMAZON_CLOSED = new Set([
+  'OUTOFSTOCK', 'DISCONTINUED',
+]);
 
 // ---- ユーティリティ ----
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
@@ -173,8 +176,9 @@ async function checkAmazon(items) {
         const title = it.itemInfo?.title?.displayValue || '';
         const image = it.images?.primary?.medium?.url || '';
         const url = it.detailPageUrl || src.url || `https://www.amazon.co.jp/dp/${src.id}${AMAZON_TAG ? `?tag=${AMAZON_TAG}` : ''}`;
-        const klass = AMAZON_ORDERABLE.has(av) ? 'orderable'
-          : AMAZON_CLOSED.has(av) ? 'closed' : 'unknown';
+        const avNorm = normalizeAv(av);
+        const klass = AMAZON_ORDERABLE.has(avNorm) ? 'orderable'
+          : AMAZON_CLOSED.has(avNorm) ? 'closed' : 'unknown';
         results.push({
           key: `amazon:${src.id}`, src, ok: true,
           name: title || src.label || src.id,
@@ -260,12 +264,12 @@ async function checkRakuten(items) {
 
 // ---- Discord通知 ----
 const STATUS_JA = {
-  Now: '在庫あり',
-  IN_STOCK_SCARCE: '残りわずか',
-  IncludesMOQ: '在庫あり(数量条件)',
-  OutOfStock: '在庫切れ',
-  PreOrder: '予約受付中',
-  BackOrder: 'お取り寄せ', Backordered: 'お取り寄せ',
+  Now: '在庫あり', NOW: '在庫あり',
+  IN_STOCK_SCARCE: '残りわずか', InStockScarce: '残りわずか',
+  IncludesMOQ: '在庫あり(数量条件)', INCLUDES_MOQ: '在庫あり(数量条件)',
+  OutOfStock: '在庫切れ', OUT_OF_STOCK: '在庫切れ',
+  PreOrder: '予約受付中', PRE_ORDER: '予約受付中',
+  BackOrder: 'お取り寄せ', Backordered: 'お取り寄せ', BACKORDERED: 'お取り寄せ', BACK_ORDER: 'お取り寄せ',
   Discontinued: '販売終了', DISCONTINUED: '販売終了',
   available: '在庫あり (信頼ショップ)', unavailable: '在庫切れ', Unknown: '不明', unknown: '不明',
 };
