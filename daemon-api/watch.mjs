@@ -383,6 +383,9 @@ async function testNotify() {
 
 async function main() {
   if (!WEBHOOK) log('WARN: DISCORD_WEBHOOK_URL 未設定（通知はスキップ）');
+  else if (/xxxxx|yyyyy/.test(WEBHOOK) || !/^https:\/\/discord\.com\/api\/webhooks\/\d+\//.test(WEBHOOK)) {
+    throw new Error('DISCORD_WEBHOOK_URL がプレースホルダーまたは不正な形式です。.env を実際の値に書き換えてください。');
+  }
   if (!AMAZON_CID && !RAKUTEN_APP_ID) throw new Error('AmazonまたはRakutenの認証情報が必要（.env参照）');
   log('config: amazon=', !!AMAZON_CID, ' rakuten=', !!RAKUTEN_APP_ID, ' interval=', INTERVAL_MS, 'ms');
 
