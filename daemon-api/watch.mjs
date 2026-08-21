@@ -422,14 +422,18 @@ async function testNotify() {
   await refreshWatchlist(true);
   if (!watch.length) { log('watchlist empty'); return; }
   const item = watch[0];
-  log('test-notify: 対象=', item.platform, item.id, item.label);
+  log('test-notify: 対象=', item.platform, item.id, item.label, item.autoCart ? '(autoCart=' + item.autoCart + ')' : '');
   const results = item.platform === 'amazon' ? await checkAmazon([item]) : await checkRakuten([item]);
   const r = results[0];
   if (!r?.ok) { log('取得失敗:', r?.error); return; }
   log('取得成功:', r.name, r.availability, r.price ? `¥${r.price}` : '');
-  // 擬似的な prev（closed 状態）を作って restocked を強制発火
+  let autoCartOpened = false;
+  if (item.autoCart && item.platform === 'amazon' && AMAZON_TAG) {
+    autoCartOpened = openInBrowser(amazonCartAddUrl(item.id, item.autoCart));
+    log('🚨 test: auto-cart browser open =', autoCartOpened);
+  }
   const fakePrev = { availability: 'OutOfStock', klass: 'closed', name: r.name, price: r.price ? r.price + 500 : null };
-  await sendDiscord(r, fakePrev, { restocked: true, priceDropped: false, priceMax: null });
+  await sendDiscord(r, fakePrev, { restocked: true, priceDropped: false, priceMax: null, autoCartOpened, autoCartQty: item.autoCart || null });
 }
 
 async function main() {
