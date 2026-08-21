@@ -313,7 +313,13 @@ async function sendDiscord(res, prev, flags) {
   };
   try {
     const r = await fetch(WEBHOOK, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
-    log('discord ->', r.status);
+    if (!r.ok) {
+      const body = await r.text().catch(() => '');
+      log('discord ->', r.status, 'body:', body.slice(0, 400));
+      log('payload dump:', JSON.stringify(payload).slice(0, 500));
+    } else {
+      log('discord ->', r.status);
+    }
   } catch (e) { log('discord error', e.message); }
 }
 
@@ -361,10 +367,30 @@ async function tick() {
   log(`tick: ${watch.length} items (a=${amazonItems.length}, r=${rakutenItems.length}), ${ord} orderable, ${cls} closed, ${fail} fail, ${notifs} notifs`);
 }
 
+async function testNotify() {
+  await refreshWatchlist(true);
+  if (!watch.length) { log('watchlist empty'); return; }
+  const item = watch[0];
+  log('test-notify: 対象=', item.platform, item.id, item.label);
+  const results = item.platform === 'amazon' ? await checkAmazon([item]) : await checkRakuten([item]);
+  const r = results[0];
+  if (!r?.ok) { log('取得失敗:', r?.error); return; }
+  log('取得成功:', r.name, r.availability, r.price ? `¥${r.price}` : '');
+  // 擬似的な prev（closed 状態）を作って restocked を強制発火
+  const fakePrev = { availability: 'OutOfStock', klass: 'closed', name: r.name, price: r.price ? r.price + 500 : null };
+  await sendDiscord(r, fakePrev, { restocked: true, priceDropped: false, priceMax: null });
+}
+
 async function main() {
   if (!WEBHOOK) log('WARN: DISCORD_WEBHOOK_URL 未設定（通知はスキップ）');
   if (!AMAZON_CID && !RAKUTEN_APP_ID) throw new Error('AmazonまたはRakutenの認証情報が必要（.env参照）');
   log('config: amazon=', !!AMAZON_CID, ' rakuten=', !!RAKUTEN_APP_ID, ' interval=', INTERVAL_MS, 'ms');
+
+  if (process.argv.includes('--test-notify')) {
+    await testNotify();
+    return;
+  }
+
   await loadState();
   await refreshWatchlist(true);
   log('daemon start, items=', watch.length);
