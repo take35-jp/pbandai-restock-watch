@@ -91,6 +91,7 @@
   <div class="hint">
     <strong>Amazon</strong>: ASIN（<code>B08XXXXXXX</code> 形式・10桁）。商品ページURL <code>amazon.co.jp/dp/B08XXXXXXX</code> から抜き出す。<br>
     <strong>楽天</strong>: JAN（バーコードの13桁数字）。信頼ショップ(book, amiami, yodobashi, joshin, biccamera 等)の在庫のみ判定。<br>
+    <strong>希望価格</strong>（任意）: この価格以下に下がった瞬間、Discordに通知（一度下がったあと再上昇→再下降まで再通知しない）。復活通知と同時発火した場合は1本の🎯通知にまとめて送信。<br>
     ラベルは表示用の覚え書き（省略可）。
   </div>
 </div>
@@ -149,7 +150,8 @@ async function loadAll(){
       const p=(x.platform||'').toLowerCase();
       if(p!=='amazon'&&p!=='rakuten') return null;
       const id=String(x.id||x.asin||x.jan||'').trim();
-      return {platform:p,id,label:x.label||''};
+      const priceMax=(typeof x.priceMax==='number'&&x.priceMax>0)?x.priceMax:null;
+      return {platform:p,id,label:x.label||'',priceMax};
     }).filter(Boolean);
     render(items);
     setDirty(false);
@@ -175,20 +177,24 @@ function itemUrl(it){
 function rowHTML(it){
   const stateInfo=state[stateKey(it)];
   const name=stateInfo?.name||'';
+  const curPrice=stateInfo?.price;
+  const priceInfo=curPrice!=null?`現在 ¥${Number(curPrice).toLocaleString()}`:'';
   return `<div class="item" data-row data-platform="${it.platform}">
     <div class="grow">
       <input class="wl-label" type="text" placeholder="ラベル（省略可）" value="${escAttr(it.label)}" style="margin-bottom:6px">
-      <div class="item-row">
+      <div class="item-row" style="grid-template-columns:100px 1fr 130px">
         <select class="wl-platform">
           <option value="amazon" ${it.platform==='amazon'?'selected':''}>Amazon</option>
           <option value="rakuten" ${it.platform==='rakuten'?'selected':''}>楽天</option>
         </select>
         <div class="row-id"><input class="wl-id" type="text" placeholder="${it.platform==='rakuten'?'JAN (13桁数字)':'ASIN (B0XXXXXXXX)'}" value="${escAttr(it.id)}"></div>
+        <input class="wl-priceMax" type="text" inputmode="numeric" placeholder="希望価格(円・任意)" value="${it.priceMax||''}">
       </div>
       <div class="flex" style="gap:6px;flex-wrap:wrap">
         <span class="badge ${it.platform==='amazon'?'b-amazon':'b-rakuten'}">${PLATFORM_JA[it.platform]}</span>
         ${badge(it)}
         ${itemUrl(it)?`<a class="url-link" href="${escAttr(itemUrl(it))}" target="_blank" rel="noopener">開く ↗</a>`:''}
+        ${priceInfo?`<span class="hint" style="margin:0">${priceInfo}</span>`:''}
         ${name?`<span class="hint" style="margin:0">${escHtml(name)}</span>`:''}
       </div>
     </div>
@@ -237,26 +243,36 @@ function collect(){
   const seen=new Set();
   rows.forEach(r=>{
     const rIdEl=r.querySelector('.row-id');
+    const priceEl=r.querySelector('.wl-priceMax');
     rIdEl.classList.remove('bad');
+    priceEl.style.borderColor='';
     const platform=r.querySelector('.wl-platform').value;
     const id=r.querySelector('.wl-id').value.trim();
     const label=r.querySelector('.wl-label').value.trim();
+    const priceMaxRaw=priceEl.value.trim().replace(/[,\s￥¥円]/g,'');
     if(!id) return;
     // 形式検証
     let ok=true;
     if(platform==='amazon'){
-      // ASIN: 10文字英数字（Bで始まることが多いが必須ではない）
       if(!/^[A-Z0-9]{10}$/i.test(id)) ok=false;
     }else if(platform==='rakuten'){
       if(!/^\d{8,14}$/.test(id)) ok=false;
     }
     if(!ok){rIdEl.classList.add('bad');bad=true;return;}
+    let priceMax=null;
+    if(priceMaxRaw){
+      priceMax=Number(priceMaxRaw);
+      if(!Number.isFinite(priceMax)||priceMax<=0){priceEl.style.borderColor='var(--danger)';bad=true;return;}
+    }
     const key=`${platform}:${id}`;
     if(seen.has(key)){rIdEl.classList.add('bad');bad=true;return;}
     seen.add(key);
-    items.push(label?{platform,id,label}:{platform,id});
+    const item={platform,id};
+    if(label) item.label=label;
+    if(priceMax) item.priceMax=priceMax;
+    items.push(item);
   });
-  if(bad) throw new Error('赤枠のIDが不正または重複しています（ASINは10文字英数字、JANは8〜14桁数字）');
+  if(bad) throw new Error('赤枠が不正です（ASIN=10文字英数字, JAN=8〜14桁数字, 希望価格=正の数値）');
   return items;
 }
 

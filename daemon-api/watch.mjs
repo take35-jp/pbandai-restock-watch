@@ -93,7 +93,8 @@ async function refreshWatchlist(force) {
       const p = String(x.platform || '').toLowerCase();
       const id = String(x.id || x.asin || x.jan || '').trim();
       if (!id || (p !== 'amazon' && p !== 'rakuten')) return null;
-      return { platform: p, id, label: x.label || '', url: x.url || '' };
+      const priceMax = (typeof x.priceMax === 'number' && x.priceMax > 0) ? x.priceMax : null;
+      return { platform: p, id, label: x.label || '', url: x.url || '', priceMax };
     }).filter(Boolean);
     lastWatchFetch = Date.now();
     log('watchlist refreshed:', watch.length, 'items');
@@ -257,20 +258,42 @@ const PLATFORM_JA = { amazon: 'Amazon', rakuten: '楽天' };
 const PLATFORM_COLOR = { amazon: 0xff9900, rakuten: 0xbf0000 };
 const statusJa = (v) => STATUS_JA[v] || v;
 
-async function sendDiscord(res, prevAv) {
+async function sendDiscord(res, prev, flags) {
   if (!WEBHOOK) { log('[no webhook] would notify', res.key); return; }
   const label = res.src.label || res.name || res.src.id;
-  const priceStr = res.price ? `¥${Number(res.price).toLocaleString('ja-JP')}` : '—';
-  const shop = res.shopCode ? `\nショップ: ${res.shopCode}` : '';
+  const priceStr = res.price != null ? `¥${Number(res.price).toLocaleString('ja-JP')}` : '—';
+  const prevPriceStr = prev?.price != null ? `¥${Number(prev.price).toLocaleString('ja-JP')}` : '—';
+  const priceMaxStr = flags.priceMax != null ? `¥${Number(flags.priceMax).toLocaleString('ja-JP')}` : '';
+
+  let content, color;
+  const desc = [];
+  if (flags.restocked && flags.priceDropped) {
+    content = `🎯 **${PLATFORM_JA[res.src.platform]} で復活＋希望価格達成！**`;
+    color = 0x8e44ad;
+    desc.push(`状態: **${statusJa(prev?.availability)} → ${statusJa(res.availability)}**`);
+    desc.push(`価格: ${prevPriceStr} → **${priceStr}** (希望 ≤ ${priceMaxStr})`);
+  } else if (flags.restocked) {
+    content = `🛒 **${PLATFORM_JA[res.src.platform]} で注文可になりました！**`;
+    color = PLATFORM_COLOR[res.src.platform] || 0x2ecc71;
+    desc.push(`状態: **${statusJa(prev?.availability)} → ${statusJa(res.availability)}**`);
+    desc.push(`価格: ${priceStr}`);
+  } else if (flags.priceDropped) {
+    content = `💰 **希望価格達成: ${priceMaxStr} 以下になりました！**`;
+    color = 0xf39c12;
+    desc.push(`価格: ${prevPriceStr} → **${priceStr}** (希望 ≤ ${priceMaxStr})`);
+    desc.push(`状態: ${statusJa(res.availability)}`);
+  }
+  if (res.shopCode) desc.push(`ショップ: ${res.shopCode}`);
+
   const payload = {
-    content: `🛒 **${PLATFORM_JA[res.src.platform] || res.src.platform} で注文可になりました！**`,
+    content,
     embeds: [{
       title: label,
       url: res.url,
-      description: `状態: **${statusJa(prevAv)} → ${statusJa(res.availability)}**\n価格: ${priceStr}${shop}`,
-      color: PLATFORM_COLOR[res.src.platform] || 0x2ecc71,
+      description: desc.join('\n'),
+      color,
       ...(res.image ? { thumbnail: { url: res.image } } : {}),
-      footer: { text: `${PLATFORM_JA[res.src.platform] || res.src.platform} · ${res.src.id}` },
+      footer: { text: `${PLATFORM_JA[res.src.platform]} · ${res.src.id}` },
     }],
   };
   try {
@@ -296,15 +319,28 @@ async function tick() {
     if (r.klass === 'closed') cls++;
     const prev = state[r.key];
     const prevKlass = prev?.klass || 'unknown';
-    if (prevKlass === 'closed' && r.klass === 'orderable') {
-      await sendDiscord(r, prev.availability);
+    const prevPrice = prev?.price ?? null;
+    const priceMax = r.src.priceMax;
+
+    // 通知トリガー判定
+    const restocked = prevKlass === 'closed' && r.klass === 'orderable';
+    // 価格が閾値を跨いで下がった瞬間だけ通知（既に下ならスパム防止）
+    const priceDropped = priceMax != null && r.price != null && r.price <= priceMax
+      && prevPrice != null && prevPrice > priceMax;
+
+    if (restocked || priceDropped) {
+      await sendDiscord(r, prev, { restocked, priceDropped, priceMax });
       notifs++;
-      log('*** NOTIFY', prev.availability, '->', r.availability, r.name);
+      log('*** NOTIFY', restocked ? '[restock]' : '', priceDropped ? '[price]' : '', r.name);
     }
-    if (!prev || prev.availability !== r.availability) {
-      state[r.key] = { availability: r.availability, klass: r.klass, name: r.name };
+
+    // 状態保存：availability か price に変化があれば
+    const changed = !prev || prev.availability !== r.availability || (prev.price ?? null) !== (r.price ?? null);
+    if (changed) {
+      state[r.key] = { availability: r.availability, klass: r.klass, name: r.name, price: r.price ?? null };
       await saveState();
-      log(prevKlass, '->', r.klass, `(${r.availability})`, r.name);
+      const priceLog = r.price != null ? `¥${r.price}` : '-';
+      log(prevKlass, '->', r.klass, `(${r.availability})`, priceLog, r.name);
     }
   }
   log(`tick: ${watch.length} items (a=${amazonItems.length}, r=${rakutenItems.length}), ${ord} orderable, ${cls} closed, ${fail} fail, ${notifs} notifs`);
