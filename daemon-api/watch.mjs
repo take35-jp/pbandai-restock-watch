@@ -40,7 +40,7 @@ const DIR = path.dirname(fileURLToPath(import.meta.url));
 
 // ---- 設定 ----
 const WEBHOOK = process.env.DISCORD_WEBHOOK_URL || '';
-const INTERVAL_MS = Number(process.env.INTERVAL_MS || 300000);
+const INTERVAL_MS = Number(process.env.INTERVAL_MS || 60000);
 const STATE_FILE = process.env.STATE_FILE || path.join(DIR, 'state.json');
 const WATCHLIST_URL = process.env.WATCHLIST_URL ||
   'https://raw.githubusercontent.com/take35-jp/pbandai-restock-watch/main/watchlist.json';
@@ -304,26 +304,22 @@ async function sendDiscord(res, prev, flags) {
   }
   if (res.shopCode) desc.push(`ショップ: ${res.shopCode}`);
 
-  // Amazon: Associates公式のAdd-to-Cart URLでワンタップカート追加リンクを付ける
-  const fields = [];
+  // Amazon: タイトルをタップ = カートに1個追加（Associates公式Add-to-Cart URL）
+  // 商品ページも見たい場合の補助リンクは description に添える
+  let primaryUrl = res.url;
   if (res.src.platform === 'amazon' && AMAZON_TAG) {
-    const cart = (qty) => `https://www.amazon.co.jp/gp/aws/cart/add.html?ASIN.1=${encodeURIComponent(res.src.id)}&Quantity.1=${qty}&AssociateTag=${encodeURIComponent(AMAZON_TAG)}`;
-    fields.push({
-      name: '🛒 ワンタップでカートに入れる',
-      value: `[1個](${cart(1)}) ・ [2個](${cart(2)}) ・ [3個](${cart(3)})`,
-      inline: false,
-    });
+    primaryUrl = `https://www.amazon.co.jp/gp/aws/cart/add.html?ASIN.1=${encodeURIComponent(res.src.id)}&Quantity.1=1&AssociateTag=${encodeURIComponent(AMAZON_TAG)}`;
+    desc.push(`👉 **タイトルをタップ = カートに1個追加**  ／  [商品ページ](${res.url})`);
   }
 
   const payload = {
     content,
     embeds: [{
       title: label,
-      url: res.url,
+      url: primaryUrl,
       description: desc.join('\n'),
       color,
       ...(res.image ? { thumbnail: { url: res.image } } : {}),
-      ...(fields.length ? { fields } : {}),
       footer: { text: `${PLATFORM_JA[res.src.platform]} · ${res.src.id}` },
     }],
   };
