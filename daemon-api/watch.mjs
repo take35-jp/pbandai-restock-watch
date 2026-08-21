@@ -406,8 +406,13 @@ async function tick() {
       log('*** NOTIFY', restocked ? '[restock]' : '', priceDropped ? '[price]' : '', autoCartOpened ? '[auto-cart]' : '', r.name);
     }
 
-    // 状態保存：availability か price に変化があれば
-    const changed = !prev || prev.availability !== r.availability || (prev.price ?? null) !== (r.price ?? null);
+    // 状態保存：availability / klass / price のどれかに変化があれば
+    // ※ klass も見るのは、分類ロジック更新時に state のklass が古いまま固まって無限通知に
+    //   なるのを防ぐため（availability が同じでも klass が食い違えば保存する）
+    const changed = !prev
+      || prev.availability !== r.availability
+      || prev.klass !== r.klass
+      || (prev.price ?? null) !== (r.price ?? null);
     if (changed) {
       state[r.key] = { availability: r.availability, klass: r.klass, name: r.name, price: r.price ?? null };
       await saveState();
