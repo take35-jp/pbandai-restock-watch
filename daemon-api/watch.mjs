@@ -63,6 +63,15 @@ const TRUSTED_SHOPS_RAKUTEN = new Set([
   'yodobashi', 'joshin', 'biccamera',
 ]);
 
+// Amazon PA-API availability.type の分類
+// 参考: PA-API 5 の availability type にはいろいろあるので、
+// 「明らかに買える」ものを orderable、「明らかにダメ」を closed、それ以外は unknown。
+const AMAZON_ORDERABLE = new Set([
+  'Now', 'IN_STOCK_SCARCE', 'IncludesMOQ',
+  'PreOrder', 'Backordered', 'BackOrder',
+]);
+const AMAZON_CLOSED = new Set(['OutOfStock', 'Discontinued', 'DISCONTINUED']);
+
 // ---- ユーティリティ ----
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 const log = (...a) => console.log(new Date().toISOString(), ...a);
@@ -164,12 +173,13 @@ async function checkAmazon(items) {
         const title = it.itemInfo?.title?.displayValue || '';
         const image = it.images?.primary?.medium?.url || '';
         const url = it.detailPageUrl || src.url || `https://www.amazon.co.jp/dp/${src.id}${AMAZON_TAG ? `?tag=${AMAZON_TAG}` : ''}`;
+        const klass = AMAZON_ORDERABLE.has(av) ? 'orderable'
+          : AMAZON_CLOSED.has(av) ? 'closed' : 'unknown';
         results.push({
           key: `amazon:${src.id}`, src, ok: true,
           name: title || src.label || src.id,
           availability: av,
-          klass: av === 'Now' ? 'orderable' : 'closed',
-          price, image, url,
+          klass, price, image, url,
         });
       }
       for (const a of batches[bi]) {
@@ -250,9 +260,14 @@ async function checkRakuten(items) {
 
 // ---- Discord通知 ----
 const STATUS_JA = {
-  Now: '在庫あり', IncludesMOQ: '在庫あり(数量条件)', OutOfStock: '在庫切れ',
-  PreOrder: '予約受付中', BackOrder: 'お取り寄せ', Discontinued: '販売終了',
-  available: '在庫あり (信頼ショップ)', unavailable: '在庫切れ', Unknown: '不明',
+  Now: '在庫あり',
+  IN_STOCK_SCARCE: '残りわずか',
+  IncludesMOQ: '在庫あり(数量条件)',
+  OutOfStock: '在庫切れ',
+  PreOrder: '予約受付中',
+  BackOrder: 'お取り寄せ', Backordered: 'お取り寄せ',
+  Discontinued: '販売終了', DISCONTINUED: '販売終了',
+  available: '在庫あり (信頼ショップ)', unavailable: '在庫切れ', Unknown: '不明', unknown: '不明',
 };
 const PLATFORM_JA = { amazon: 'Amazon', rakuten: '楽天' };
 const PLATFORM_COLOR = { amazon: 0xff9900, rakuten: 0xbf0000 };

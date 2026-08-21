@@ -102,7 +102,7 @@ const WL_PATH='watchlist.json', STATE_PATH='daemon-api/state.json';
 const API=`https://api.github.com/repos/${OWNER}/${REPO}/contents`;
 const TOKEN_KEY='pbandai_admin_token';
 
-const STATUS_JA={Now:'在庫あり',IncludesMOQ:'在庫あり(数量条件)',OutOfStock:'在庫切れ',PreOrder:'予約受付中',BackOrder:'お取り寄せ',Discontinued:'販売終了',available:'在庫あり',unavailable:'在庫切れ',Unknown:'不明'};
+const STATUS_JA={Now:'在庫あり',IN_STOCK_SCARCE:'残りわずか',IncludesMOQ:'在庫あり(数量条件)',OutOfStock:'在庫切れ',PreOrder:'予約受付中',BackOrder:'お取り寄せ',Backordered:'お取り寄せ',Discontinued:'販売終了',DISCONTINUED:'販売終了',available:'在庫あり',unavailable:'在庫切れ',Unknown:'不明',unknown:'不明'};
 const PLATFORM_JA={amazon:'Amazon',rakuten:'楽天'};
 
 let wlSha=null;
