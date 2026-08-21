@@ -304,6 +304,17 @@ async function sendDiscord(res, prev, flags) {
   }
   if (res.shopCode) desc.push(`ショップ: ${res.shopCode}`);
 
+  // Amazon: Associates公式のAdd-to-Cart URLでワンタップカート追加リンクを付ける
+  const fields = [];
+  if (res.src.platform === 'amazon' && AMAZON_TAG) {
+    const cart = (qty) => `https://www.amazon.co.jp/gp/aws/cart/add.html?ASIN.1=${encodeURIComponent(res.src.id)}&Quantity.1=${qty}&AssociateTag=${encodeURIComponent(AMAZON_TAG)}`;
+    fields.push({
+      name: '🛒 ワンタップでカートに入れる',
+      value: `[1個](${cart(1)}) ・ [2個](${cart(2)}) ・ [3個](${cart(3)})`,
+      inline: false,
+    });
+  }
+
   const payload = {
     content,
     embeds: [{
@@ -312,6 +323,7 @@ async function sendDiscord(res, prev, flags) {
       description: desc.join('\n'),
       color,
       ...(res.image ? { thumbnail: { url: res.image } } : {}),
+      ...(fields.length ? { fields } : {}),
       footer: { text: `${PLATFORM_JA[res.src.platform]} · ${res.src.id}` },
     }],
   };
