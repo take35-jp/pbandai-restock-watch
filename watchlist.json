@@ -1,10 +1,12 @@
 [
   {
     "platform": "amazon",
-    "id": "B09Q6FLH2Q"
+    "id": "B09Q6FLH2Q",
+    "priceMax": 4300
   },
   {
     "platform": "amazon",
-    "id": "B00030EU8K"
+    "id": "B00030EU8K",
+    "priceMax": 4300
   }
 ]
