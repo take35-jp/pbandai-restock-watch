@@ -14,6 +14,7 @@
   {
     "platform": "amazon",
     "id": "B0006TNAJI",
-    "priceMax": 5000
+    "priceMax": 5000,
+    "autoCart": true
   }
 ]
