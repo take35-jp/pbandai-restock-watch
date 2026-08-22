@@ -10,5 +10,10 @@
     "id": "B00030EU8K",
     "priceMax": 5100,
     "autoCart": true
+  },
+  {
+    "platform": "amazon",
+    "id": "B0006TNAJI",
+    "priceMax": 5000
   }
 ]
